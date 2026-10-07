@@ -1,0 +1,278 @@
+@model Dashboard
+@{
+    ViewData["Title"] = "Daily planner";
+    var key = Model.Date.ToString("yyyy-MM-dd");
+    var done = Model.Tasks.Count(t => t.IsCompleted);
+    var percent = Model.Tasks.Count == 0 ? 0 : done * 100 / Model.Tasks.Count;
+    var visible = Model.Tasks
+        .Where(t => (string.IsNullOrWhiteSpace(Model.Search) ||
+                     t.Title.Contains(Model.Search, StringComparison.OrdinalIgnoreCase) ||
+                     (t.Notes?.Contains(Model.Search, StringComparison.OrdinalIgnoreCase) ?? false)) &&
+                    (Model.Status != "done" || t.IsCompleted) &&
+                    (Model.Status != "pending" || !t.IsCompleted))
+        .ToList();
+
+    var first = new DateOnly(Model.Date.Year, Model.Date.Month, 1);
+    var days = DateTime.DaysInMonth(first.Year, first.Month);
+    var offset = ((int)first.DayOfWeek + 6) % 7;
+    var previous = first.AddMonths(first.Year == 1 && first.Month == 1 ? 0 : -1);
+    var next = first.AddMonths(first.Year == 9999 && first.Month == 12 ? 0 : 1);
+    var hours = Model.Tasks.Sum(t => (t.EndTime.ToTimeSpan() - t.StartTime.ToTimeSpan()).TotalHours);
+
+    var current = Model.Date == Model.Today
+        ? Model.Tasks.FirstOrDefault(t => !t.IsCompleted && t.StartTime <= Model.Now && t.EndTime > Model.Now)
+        : null;
+
+    var upcoming = Model.Date == Model.Today
+        ? Model.Tasks.FirstOrDefault(t => !t.IsCompleted && t.StartTime > Model.Now)
+        : Model.Tasks.FirstOrDefault(t => !t.IsCompleted);
+
+    var weekDone = Model.WeekTasks.Count(t => t.IsCompleted);
+    var weekPercent = Model.WeekTasks.Count == 0 ? 0 : weekDone * 100 / Model.WeekTasks.Count;
+}
+
+<header class="top">
+    <div>
+        <p class="eyebrow">A FRESH START, EVERY DAY</p>
+        <h1>Your day, your rhythm<span>.</span></h1>
+        <p>Make room for what matters. Let’s plan a good day.</p>
+    </div>
+    <a class="primary button" asp-action="Create" asp-route-date="@key">+ Add task</a>
+</header>
+
+<div class="quick-actions" aria-label="Dashboard actions">
+    <a class="button" asp-action="Index">⌂ Today</a>
+    @if (Model.Date > DateOnly.MinValue)
+    {
+        <a class="button" asp-action="Index" asp-route-date="@Model.Date.AddDays(-1).ToString("yyyy-MM-dd")">← Previous day</a>
+    }
+    @if (Model.Date < DateOnly.MaxValue)
+    {
+        <a class="button" asp-action="Index" asp-route-date="@Model.Date.AddDays(1).ToString("yyyy-MM-dd")">Next day →</a>
+    }
+    <a class="button" href="#weekly-progress">Weekly progress</a>
+    <a class="button" href="#copy-routine">Copy routine</a>
+    <a class="button" asp-action="Export" asp-route-date="@key">Download Excel (.xlsx)</a>
+
+    @if (Model.Tasks.Count == 0)
+    {
+        <form asp-action="Starter" method="post">
+            <input type="hidden" name="date" value="@key" />
+            <button>+ Starter routine</button>
+        </form>
+    }
+
+    @if (Model.Tasks.Any(t => !t.IsCompleted))
+    {
+        <form asp-action="CompleteDay" method="post" data-confirm="Mark every pending task on this date complete?">
+            <input type="hidden" name="date" value="@key" />
+            <button>✓ Complete day</button>
+        </form>
+    }
+
+    <button type="button" id="theme-toggle" aria-pressed="false">Dark theme</button>
+</div>
+
+<div class="focus-panels">
+    <section class="panel">
+        <p class="eyebrow">@(Model.Date == Model.Today ? "RIGHT NOW" : "SELECTED DATE")</p>
+        <h2>@(current?.Title ?? (Model.Date == Model.Today ? "No active task" : "Your planned day"))</h2>
+        @if (current != null)
+        {
+            <p>@current.StartTime.ToString("HH:mm") – @current.EndTime.ToString("HH:mm") · @current.Category</p>
+            <a class="subtle" asp-action="Edit" asp-route-id="@current.Id">View / edit task →</a>
+        }
+        else
+        {
+            <p>@(Model.Date == Model.Today ? "Use the next task below to plan your next step." : "Choose Today to see your current and next task.")</p>
+        }
+    </section>
+
+    <section class="panel">
+        <p class="eyebrow">@(Model.Date == Model.Today ? "UP NEXT" : "FIRST PENDING TASK")</p>
+        <h2>@(upcoming?.Title ?? "No upcoming tasks")</h2>
+        @if (upcoming != null)
+        {
+            <p>@upcoming.StartTime.ToString("HH:mm") – @upcoming.EndTime.ToString("HH:mm") · @upcoming.Priority priority</p>
+            <a class="subtle" asp-action="Edit" asp-route-id="@upcoming.Id">View / edit task →</a>
+        }
+        else
+        {
+            <p>Add a task when you’re ready.</p>
+        }
+    </section>
+</div>
+
+<div class="stats">
+    <article class="panel">
+        <span>PLANNED TASKS</span>
+        <strong>@Model.Tasks.Count <small>for this day</small></strong>
+    </article>
+    <article class="panel">
+        <span>COMPLETED</span>
+        <strong>@done <small>small wins</small></strong>
+    </article>
+    <article class="panel">
+        <span>PLANNED HOURS</span>
+        <strong>@hours.ToString("0.#") <small>hours</small></strong>
+    </article>
+    <article class="panel">
+        <span>DAILY PROGRESS</span>
+        <strong>@percent<small>% complete</small></strong>
+        <progress max="100" value="@percent">@percent%</progress>
+    </article>
+</div>
+
+<div class="workspace">
+    <section class="panel schedule">
+        <div class="section-head">
+            <div>
+                <p class="eyebrow">DAILY TIMELINE</p>
+                <h2>@Model.Date.ToString("dddd, dd MMMM")</h2>
+            </div>
+            <a class="subtle" asp-action="Export" asp-route-date="@key">Export Excel (.xlsx) ↓</a>
+        </div>
+
+        <form method="get" class="filters">
+            <input type="hidden" name="date" value="@key" />
+            <input name="search" value="@Model.Search" placeholder="Search your tasks…" aria-label="Search tasks" />
+            <select name="status" aria-label="Task status">
+                @foreach (var value in new[] { "all", "pending", "done" })
+                {
+                    <option value="@value" selected="@(Model.Status == value)">@value</option>
+                }
+            </select>
+            <button type="submit">Filter</button>
+        </form>
+
+        @if (Model.Tasks.Count == 0)
+        {
+            <div class="empty">
+                <div>☀</div>
+                <h3>A new day, a clean page.</h3>
+                <p>Add your first task or start with a balanced student routine.</p>
+                <form asp-action="Starter" method="post">
+                    <input type="hidden" name="date" value="@key" />
+                    <button class="primary">Use starter routine</button>
+                </form>
+            </div>
+        }
+        else if (visible.Count == 0)
+        {
+            <p class="empty">No tasks match this filter.</p>
+        }
+
+        @foreach (var task in visible)
+        {
+            <article class="task @(task.IsCompleted ? "completed" : "")">
+                <div class="time">
+                    @task.StartTime.ToString("HH:mm")
+                    <small>@task.EndTime.ToString("HH:mm")</small>
+                </div>
+
+                <form asp-action="Toggle" method="post">
+                    <input type="hidden" name="id" value="@task.Id" />
+                    <button class="check"
+                            aria-label="@(task.IsCompleted ? "Mark incomplete: " : "Complete: ")@task.Title"
+                            aria-pressed="@task.IsCompleted.ToString().ToLowerInvariant()">
+                        @(task.IsCompleted ? "✓" : "")
+                    </button>
+                </form>
+
+                <div class="task-body">
+                    <h3>@task.Title</h3>
+                    @if (!string.IsNullOrWhiteSpace(task.Notes))
+                    {
+                        <p>@task.Notes</p>
+                    }
+                    <span class="tag">@task.Category</span>
+                    <span class="priority @task.Priority.ToLowerInvariant()">@task.Priority priority</span>
+                </div>
+
+                <div class="task-actions">
+                    <a asp-action="Edit" asp-route-id="@task.Id">Edit</a>
+                    <form asp-action="Delete" method="post" data-confirm="Delete this task permanently?">
+                        <input type="hidden" name="id" value="@task.Id" />
+                        <button class="danger">Delete</button>
+                    </form>
+                </div>
+            </article>
+        }
+    </section>
+
+    <aside class="right">
+        <section class="panel calendar">
+            <div class="section-head">
+                <h2>@first.ToString("MMMM yyyy")</h2>
+                <div>
+                    <a aria-label="Previous month" asp-route-date="@previous.ToString("yyyy-MM-dd")">‹</a>
+                    <a aria-label="Next month" asp-route-date="@next.ToString("yyyy-MM-dd")">›</a>
+                </div>
+            </div>
+
+            <div class="calendar-grid">
+                @foreach (var day in new[] { "M", "T", "W", "T", "F", "S", "S" })
+                {
+                    <span class="weekday">@day</span>
+                }
+
+                @for (var i = 0; i < offset; i++)
+                {
+                    <span></span>
+                }
+
+                @for (var i = 1; i <= days; i++)
+                {
+                    var date = new DateOnly(first.Year, first.Month, i);
+                    <a class="day @(date == Model.Date ? "selected" : "") @(Model.MonthCounts.ContainsKey(date) ? "has-tasks" : "")"
+                       asp-route-date="@date.ToString("yyyy-MM-dd")"
+                       aria-label="@date.ToString("dd MMMM yyyy")">@i</a>
+                }
+            </div>
+
+            <p class="hint">A dot means saved tasks. Select any date to view its history.</p>
+
+            <form method="get" class="jump">
+                <input type="date" name="date" value="@key" required aria-label="Choose date" />
+                <button>Go</button>
+            </form>
+
+            <a asp-action="Index" class="subtle">Back to today</a>
+        </section>
+
+        <section class="panel copy" id="copy-routine">
+            <p class="eyebrow">KEEP THE MOMENTUM</p>
+            <h2>Reuse this routine</h2>
+            <p>Copy this day’s tasks to an empty date. Your original history stays saved.</p>
+            <form asp-action="CopyDay" method="post">
+                <input type="hidden" name="source" value="@key" />
+                <label for="target">Destination date</label>
+                <input id="target" name="target" type="date" required />
+                <button class="primary">Copy routine →</button>
+            </form>
+        </section>
+    </aside>
+</div>
+
+<section class="panel weekly" id="weekly-progress">
+    <p class="eyebrow">MONDAY TO SUNDAY · SELECTED WEEK</p>
+    <h2>Weekly progress</h2>
+    <p>@weekDone of @Model.WeekTasks.Count tasks complete · @weekPercent%</p>
+    <progress max="100" value="@weekPercent">@weekPercent%</progress>
+
+    <div class="week-days">
+        @{
+            var start = Model.Date.AddDays(-Math.Min(Model.Date.DayNumber, ((int)Model.Date.DayOfWeek + 6) % 7));
+        }
+        @for (var n = 0; n < 7 && start.DayNumber + n <= DateOnly.MaxValue.DayNumber; n++)
+        {
+            var day = start.AddDays(n);
+            var dayTasks = Model.WeekTasks.Where(t => t.Date == day).ToList();
+            <a class="week-day" asp-action="Index" asp-route-date="@day.ToString("yyyy-MM-dd")">
+                <strong>@day.ToString("ddd")</strong>
+                <span>@day.ToString("dd MMM")</span>
+                <small>@dayTasks.Count(t => t.IsCompleted)/@dayTasks.Count done</small>
+            </a>
+        }
+    </div>
+</section>

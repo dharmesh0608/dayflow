@@ -1,0 +1,62 @@
+@model RoutineTask
+@{
+    ViewData["Title"] = Model.Id == 0 ? "Add task" : "Edit task";
+}
+
+<a class="back" asp-action="Index" asp-route-date="@Model.Date.ToString("yyyy-MM-dd")">← Back to planner</a>
+
+<header>
+    <p class="eyebrow">YOUR DAILY RHYTHM</p>
+    <h1>@ViewData["Title"]</h1>
+    <p>Give your next step a time and a place.</p>
+</header>
+
+<form asp-action="Save" method="post" class="panel editor">
+    <div asp-validation-summary="All" class="validation" role="alert"></div>
+    <input asp-for="Id" type="hidden" />
+
+    <label asp-for="Title">Task title</label>
+    <input asp-for="Title" required maxlength="100" placeholder="e.g. Practice Python" />
+
+    <div class="fields">
+        <div>
+            <label asp-for="Date"></label>
+            <input asp-for="Date" type="date" required value="@Model.Date.ToString("yyyy-MM-dd")" />
+        </div>
+        <div>
+            <label asp-for="Category"></label>
+            <select asp-for="Category">
+                @foreach (var category in new[] { "Study", "College", "Exercise", "Meals", "Personal", "Work" })
+                {
+                    <option value="@category">@category</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="fields">
+        <div>
+            <label asp-for="StartTime">Start time</label>
+            <input asp-for="StartTime" type="time" required value="@Model.StartTime.ToString("HH:mm")" />
+        </div>
+        <div>
+            <label asp-for="EndTime">End time</label>
+            <input asp-for="EndTime" type="time" required value="@Model.EndTime.ToString("HH:mm")" />
+        </div>
+    </div>
+
+    <label asp-for="Priority"></label>
+    <select asp-for="Priority">
+        <option>Low</option>
+        <option>Medium</option>
+        <option>High</option>
+    </select>
+
+    <label asp-for="Notes"></label>
+    <textarea asp-for="Notes" rows="4" maxlength="500" placeholder="Anything you want to remember…"></textarea>
+
+    <div class="actions">
+        <button class="primary" type="submit">Save task</button>
+        <a class="button" asp-action="Index" asp-route-date="@Model.Date.ToString("yyyy-MM-dd")">Cancel</a>
+    </div>
+</form>

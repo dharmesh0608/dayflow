@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] · Dayflow</title>
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('dayflow-theme');
+                if (theme === 'dark') {
+                    document.documentElement.dataset.theme = 'dark';
+                }
+            } catch (e) { }
+        })();
+    </script>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <aside class="sidebar">
+        <a class="brand" asp-action="Index">
+            ◈ <span>dayflow<small>MAKE TIME FOR YOU</small></span>
+        </a>
+        <nav>
+            <a asp-action="Index">▦ Daily planner</a>
+        </nav>
+        <div class="side-note">
+            <span>ONE DAY AT A TIME</span>
+            <h3>A little progress,<br />every day.</h3>
+            <p>Plan your routine. Build your rhythm.</p>
+        </div>
+        <p class="local">Personal planner · MySQL</p>
+    </aside>
+
+    <main>
+        @if (TempData["Message"] is string message)
+        {
+            <div class="notice" role="status">@message</div>
+        }
+        @RenderBody()
+    </main>
+
+    <script src="~/js/site.js" asp-append-version="true"></script>
+</body>
+</html>
